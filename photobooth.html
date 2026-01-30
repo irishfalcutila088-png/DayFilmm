@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Soft Booth</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+  margin:0;
+  font-family:'Helvetica Neue',sans-serif;
+  background:#f6f3ef;
+  display:flex;
+  justify-content:center;
+}
+
+.app{
+  max-width:420px;
+  width:100%;
+  padding:12px;
+}
+
+video,canvas{
+  width:100%;
+  border-radius:18px;
+  background:#fff;
+}
+
+.controls{
+  display:grid;
+  gap:8px;
+  margin-top:10px;
+}
+
+button,select,input{
+  padding:10px;
+  border-radius:14px;
+  border:none;
+  background:#fff;
+  font-size:15px;
+  box-shadow:0 4px 12px rgba(0,0,0,.08);
+}
+
+button{
+  background:#f3c6c6;
+}
+
+.stickers img{ width:48px; }
+
+canvas{
+  margin-top:14px;
+  touch-action:none;
+}
+
+.countdown{
+  position:fixed;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:80px;
+  font-weight:600;
+  color:#fff;
+  background:rgba(0,0,0,.3);
+  backdrop-filter:blur(4px);
+  opacity:0;
+  pointer-events:none;
+  transition:.2s;
+}
+
+.countdown.show{ opacity:1; }
+</style>
+</head>
+
+<body>
+<div class="app">
+
+<video id="video" autoplay playsinline></video>
+
+<div class="controls">
+  <select id="timer">
+    <option value="0">No Timer</option>
+    <option value="3">3s Timer</option>
+    <option value="5">5s Timer</option>
+  </select>
+
+  <select id="filter">
+    <option value="none">No Filter</option>
+    <option value="bw">Black & White</option>
+    <option value="vintage">Vintage</option>
+    <option value="soft">Soft Glow</option>
+  </select>
+
+  <select id="frameColor">
+    <option value="#ffffff">White</option>
+    <option value="#f2e9e4">Cream</option>
+    <option value="#e8dcd4">Beige</option>
+    <option value="#e3e8f0">Korean Blue</option>
+  </select>
+
+  <button onclick="startCapture()">📸 Capture</button>
+
+  <input id="text" placeholder="your little message">
+  <button onclick="addDate()">Add Date</button>
+
+  <div class="stickers">
+    <img src="https://i.imgur.com/6XgqQ4f.png" onclick="addSticker(this)">
+    <img src="https://i.imgur.com/Zc7QZ2G.png" onclick="addSticker(this)">
+    <img src="https://i.imgur.com/9XntbQe.png" onclick="addSticker(this)">
+  </div>
+
+  <button onclick="download()">Download</button>
+</div>
+
+<canvas id="canvas" width="320" height="900"></canvas>
+
+</div>
+
+<div id="countdown" class="countdown"></div>
+
+<script>
+const video=document.getElementById("video");
+const canvas=document.getElementById("canvas");
+const ctx=canvas.getContext("2d");
+const countdownEl=document.getElementById("countdown");
+
+let photos=[],stickers=[],dragging=null;
+let dateText="",customText="";
+
+navigator.mediaDevices.getUserMedia({video:{facingMode:"user"}})
+.then(s=>video.srcObject=s);
+
+text.oninput=e=>{customText=e.target.value;draw();};
+
+function startCapture(){
+  const t=parseInt(timer.value);
+  if(!t) return capture();
+  let c=t;
+  countdownEl.textContent=c;
+  countdownEl.classList.add("show");
+  const interval=setInterval(()=>{
+    c--;
+    if(c>0) countdownEl.textContent=c;
+    else{
+      clearInterval(interval);
+      countdownEl.classList.remove("show");
+      capture();
+    }
+  },1000);
+}
+
+function capture(){
+  const temp=document.createElement("canvas");
+  temp.width=video.videoWidth;
+  temp.height=video.videoHeight;
+  temp.getContext("2d").drawImage(video,0,0);
+  photos.push(temp);
+  draw();
+}
+
+function addDate(){
+  dateText=new Date().toLocaleDateString();
+  draw();
+}
+
+function addSticker(img){
+  stickers.push({img,x:120,y:500,size:60});
+  draw();
+}
+
+function applyFilter(){
+  ctx.filter=
+    filter.value==="bw"?"grayscale(1)":
+    filter.value==="vintage"?"sepia(.6) contrast(1.1)":
+    filter.value==="soft"?"brightness(1.05) blur(.3px)":
+    "none";
+}
+
+function filmGrain(){
+  const imgData=ctx.getImageData(0,0,canvas.width,canvas.height);
+  for(let i=0;i<imgData.data.length;i+=4){
+    const g=(Math.random()-.5)*18;
+    imgData.data[i]+=g;
+    imgData.data[i+1]+=g;
+    imgData.data[i+2]+=g;
+  }
+  ctx.putImageData(imgData,0,0);
+}
+
+function draw(){
+  const frameColor=frameColorSelect.value;
+  const count=3,size=250,gap=20;
+  canvas.height=count*(size+gap)+180;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  for(let i=0;i<count;i++){
+    const y=gap+i*(size+gap);
+    ctx.fillStyle=frameColor;
+    ctx.fillRect(20,y,280,size+40);
+    if(photos[i]){
+      applyFilter();
+      ctx.drawImage(photos[i],30,y+20,260,size);
+      ctx.filter="none";
+    }
+  }
+
+  filmGrain();
+
+  ctx.textAlign="center";
+  ctx.fillStyle="#333";
+  ctx.font="16px sans-serif";
+  ctx.fillText(customText,canvas.width/2,canvas.height-60);
+  ctx.font="13px sans-serif";
+  ctx.fillText(dateText,canvas.width/2,canvas.height-35);
+
+  stickers.forEach(s=>ctx.drawImage(s.img,s.x,s.y,s.size,s.size));
+}
+
+canvas.onpointerdown=e=>{
+  const r=canvas.getBoundingClientRect();
+  const x=e.clientX-r.left,y=e.clientY-r.top;
+  stickers.forEach(s=>{
+    if(x>s.x&&x<s.x+s.size&&y>s.y&&y<s.y+s.size) dragging=s;
+  });
+};
+
+canvas.onpointermove=e=>{
+  if(!dragging)return;
+  const r=canvas.getBoundingClientRect();
+  dragging.x=e.clientX-r.left-dragging.size/2;
+  dragging.y=e.clientY-r.top-dragging.size/2;
+  draw();
+};
+
+canvas.onpointerup=()=>dragging=null;
+
+canvas.onwheel=e=>{
+  if(!dragging)return;
+  dragging.size+=e.deltaY*-0.05;
+  dragging.size=Math.max(30,Math.min(140,dragging.size));
+  draw();
+};
+
+function download(){
+  const a=document.createElement("a");
+  a.download="soft-booth.png";
+  a.href=canvas.toDataURL();
+  a.click();
+}
+</script>
+
+</body>
+</html>
